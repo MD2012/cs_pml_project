@@ -147,3 +147,9 @@ varImpPlot(modFit2, main="Variable Importance: Random Forest", n.var = 50)
 ```
 
 The Variable Importance Chart also underlines that the random model at hand explains a considerable amount of variance with about 50 variables included.
+
+# Prediction Results
+```{r}
+testPred <- predict(modFit2, test, type="class")
+testPred
+```
