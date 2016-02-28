@@ -1,0 +1,158 @@
+---
+title: "Practical Machine Learning - Weight Lifting Exercise Prediction"
+author: "MD"
+date: "28. Februar 2016"
+output: html_document
+---
+
+# Task
+- predict manner in which people did exercise, i.e. "classe" variable
+- how build model?
+- how did cross validation? (confusion matrix)
+- expected out of sample error? ()
+- why made all choices?
+- apply trained algo to predict 20 different test cases?
+
+# Experiment Set
+Six participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions:
+
+| Class A | Class B | Class C | Class D | Class E |
+|---|---|---|---|---|
+exactly according to specification | throwing elbows to the front | lifting the dumbbell only halfway | lowering the dumbbell only halfway | throwing the hips to the front
+
+```{r,verbose=FALSE,echo=FALSE}
+library(ggplot2);
+library(caret);
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+#library(Rcpp)
+#library(Amelia)
+```
+
+## Load
+First of all, we load the dataset. Since we do not want to download the files on each analysis run we
+follow a 2-step process. First, if the files have not been downloaded to the local "data" folder we download them.
+The train and test set reference these local downloaded files. In any subsequent analysis run, the files will not be re-downloaded if they are already available in the "data" folder.
+```{r}
+src_train <- read.csv("pml-training.csv")
+src_test <- read.csv("pml-testing.csv")
+```
+
+## Exploratory Analysis
+Here we get a grasp on the overall dataset, its structure and summary statistics.
+```{r}
+names(src_train)
+head(src_train)
+dim(src_train)
+summary(src_train)
+#head(train$classe)
+```
+Due to the big amount of 160 variables included, we decide against further exploratory analysis to detect correlation structures using featureplot e.g. but will directly step into preparation of machine learning model fits in the next steps.
+
+## Clean
+Now we turn to cleaning the data from:
+1. Irrelevant Variables
+2. Near Zero Variance Variables
+3. Variables with too many N/A values
+
+### Irrelevant
+Looking at the variables we do not expect that neither the running ID variable *X*, the *user_name* nor any of the timestamp variables  have a significant influence on the outcome variable *classe* unless the experiment setup is flawed itself.
+```{r}
+clean_irrelevant <- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp")
+clean_names <- names(src_train) %in% clean_irrelevant
+src_train_cleaned <- src_train[!clean_names]
+src_test_cleaned <- src_test[!clean_names]
+dim(src_train_cleaned)
+dim(src_test_cleaned)
+```
+
+### Impute or Remove N/As
+Now we set up an algorithm to either impute or remove variables with too many n/a values.
+The summary table revealed that some columns either have no n/a values or a large amount.
+Hence we decide to remove all columns that contain more than 30% n/a values:
+```{r}
+totRows <- nrow(src_train_cleaned);
+naFraction <- 0.3;
+totNaFraction <- naFraction * totRows;
+stc <- src_train_cleaned;
+src_train_cleaned <- src_train_cleaned[, colSums(is.na(stc)) < totNaFraction];
+src_test_cleaned <- src_test_cleaned[, colSums(is.na(stc)) < totNaFraction];
+dim(src_train_cleaned)
+dim(src_test_cleaned)
+```
+
+### Near Zero Variance
+Variables that have near zero variance are also removed.
+```{r}
+clean_nzv <- nearZeroVar(src_train_cleaned, saveMetrics=TRUE)
+src_train_cleaned <- src_train_cleaned[!clean_nzv$nzv]
+src_test_cleaned <- src_test_cleaned[!clean_nzv$nzv]
+dim(src_train_cleaned)
+dim(src_test_cleaned)
+```
+
+## Split
+In order to train multiple models we further partition the training test set into a 70% training and 30% validation set such that we arrive at **train**, a **validation** and a **test** data subset.
+```{r}
+partThreshold <- 0.6;
+inTrain <- createDataPartition(y=src_train_cleaned$classe, p=partThreshold, list=FALSE);
+train <- src_train_cleaned[inTrain,];
+valid <- src_train_cleaned[-inTrain,];
+test <- src_test_cleaned;
+dim(train);
+dim(valid);
+dim(test);
+```
+
+## Sanity Check
+Now we perform some basic sanity check on the data sets, i.e.:
+1. Does the column number match in all data subsets?
+```{r}
+match_cols <- all.equal(ncol(train), ncol(valid), ncol(test));
+match_cols
+```
+
+## Fit
+Using the **train** data we will know fit **2** different models, a decision tree and a random forest based model.
+
+### Decision Tree
+We are now applying the rpart model fit on our cleaned train data set and creating the corresponding fancyRpart plot to visualize the result decision tree.
+```{r}
+modFit1 <- rpart(classe ~ ., data=train)
+fancyRpartPlot(modFit1)
+```
+
+We can now use the result decision tree to predict **classe** based on **modFitDt**
+and compute the corresponding confusionMatrix to find out about the model accuracy:
+```{r}
+pred1 <- predict(modFit1, newdata=valid, type="class")
+confusionMatrix(pred1, valid$classe)
+```
+
+### Random Forest
+Now we run the same analysis using a random forest algorithm:
+```{r}
+modFit2 <- randomForest(classe ~ ., data=train)
+pred2 <- predict(modFit2, newdata=valid, type="class")
+confusionMatrix(pred2, valid$classe)
+```
+
+## Results
+Looking at the accuracy we would favor the random forest algorithm over the decision tree based approach.
+
+### Root Mean Squared Error
+```{r}
+library(caret)
+#sqrt(sum(lm1$fitted - train$classe)^2)
+#sqrt(sum((predict(lm1, newdata=test)-test$classe)^2))
+
+#modFit <- train(classe ~ . , data=train, method = "lm")
+#summary(modFit$finalModel)
+```
+
+
+## Accuracy
+- confusion matrix
+
